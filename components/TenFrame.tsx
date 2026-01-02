@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, Transition } from 'framer-motion';
-import { Star, Heart, Zap, Circle } from 'lucide-react';
+import { Star, Heart, Zap, Circle, X } from 'lucide-react';
 
 type LayoutIdResolver = (index: number, type: 'primary' | 'secondary') => string | undefined;
 type TransitionResolver = (type: 'primary' | 'secondary', globalIndex: number) => Transition;
@@ -9,6 +9,7 @@ interface TenFrameRowProps {
   rowNumber: number;
   filledCount: number; // Primary filled (Color 1)
   secondaryFilledCount?: number; // Secondary filled (Color 2)
+  removedCount?: number; // Count of items to mark as removed (from the end of filledCount)
   color: string;
   secondaryColor?: string;
   iconType: 'star' | 'heart' | 'zap' | 'circle';
@@ -58,6 +59,7 @@ const TenFrameRow: React.FC<TenFrameRowProps> = ({
   rowNumber, 
   filledCount, 
   secondaryFilledCount = 0,
+  removedCount = 0,
   color, 
   secondaryColor,
   iconType,
@@ -97,6 +99,12 @@ const TenFrameRow: React.FC<TenFrameRowProps> = ({
                  lid = layoutIdResolver(globalIndex, isPrimary ? 'primary' : 'secondary');
               }
 
+              // Subtraction Logic: Mark as removed if it's in the primary set and within the removal range
+              // We remove from the end of the filled set.
+              // Logic: if we have 5 items and remove 2, indices 3 and 4 are removed.
+              // indexInRow >= (filledCount - removedCount)
+              const isRemoved = isPrimary && indexInRow >= (filledCount - removedCount);
+
               // Resolve Transition
               const transitionConfig = typeof motionTransition === 'function' 
                 ? motionTransition(isPrimary ? 'primary' : 'secondary', globalIndex)
@@ -114,6 +122,7 @@ const TenFrameRow: React.FC<TenFrameRowProps> = ({
                     w-8 h-8 md:w-12 md:h-12 rounded-lg border-2 border-gray-300 flex items-center justify-center
                     ${isResult ? 'bg-white' : 'bg-white/50'}
                     transition-colors duration-300 bg-gray-50
+                    relative
                   `}
                 >
                   <motion.div
@@ -121,7 +130,7 @@ const TenFrameRow: React.FC<TenFrameRowProps> = ({
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ 
                       scale: isFilled ? 1 : 0, 
-                      opacity: isFilled ? 1 : 0
+                      opacity: isFilled ? (isRemoved ? 0.4 : 1) : 0
                     }}
                     transition={transitionConfig}
                   >
@@ -131,6 +140,18 @@ const TenFrameRow: React.FC<TenFrameRowProps> = ({
                       </FloatingDot>
                     )}
                   </motion.div>
+                  
+                  {/* Removed Overlay */}
+                  {isFilled && isRemoved && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                    >
+                      <X className="w-8 h-8 text-red-500 opacity-80" strokeWidth={3} />
+                    </motion.div>
+                  )}
                 </div>
               );
             })}
@@ -144,6 +165,7 @@ const TenFrameRow: React.FC<TenFrameRowProps> = ({
 interface TenFrameGridProps {
   value: number; // Primary Value
   secondaryValue?: number; // Secondary Value (appended after primary)
+  removedValue?: number; // Amount to remove from primary value
   maxValue?: number;
   color?: string; // Primary Color
   secondaryColor?: string; // Secondary Color
@@ -158,6 +180,7 @@ interface TenFrameGridProps {
 const TenFrameGrid: React.FC<TenFrameGridProps> = ({ 
   value, 
   secondaryValue = 0,
+  removedValue = 0,
   maxValue = 10, 
   color = 'text-sparkle-primary', 
   secondaryColor = 'text-sparkle-secondary',
@@ -190,6 +213,12 @@ const TenFrameGrid: React.FC<TenFrameGridProps> = ({
           // Calculate overlap for Secondary in this row
           const rowSecondaryCount = Math.max(0, Math.min(sEnd, rowEnd) - Math.max(sStart, rowStart));
           
+          // Calculate removed count for this row
+          // Removed range is [value - removedValue, value)
+          const rStart = Math.max(0, value - removedValue);
+          const rEnd = value;
+          const rowRemovedCount = Math.max(0, Math.min(rEnd, rowEnd) - Math.max(rStart, rowStart));
+
           return (
             <TenFrameRow 
               key={i}
@@ -197,6 +226,7 @@ const TenFrameGrid: React.FC<TenFrameGridProps> = ({
               rowNumber={i + 1}
               filledCount={rowPrimaryCount}
               secondaryFilledCount={rowSecondaryCount}
+              removedCount={rowRemovedCount}
               color={color}
               secondaryColor={secondaryColor}
               iconType={iconType}
@@ -209,10 +239,9 @@ const TenFrameGrid: React.FC<TenFrameGridProps> = ({
           );
         })}
       </div>
-      
-      {/* Summary Number */}
-      <div className={`text-2xl font-bold font-sans ${color} mt-1`}>
-        {totalValue}
+      {/* Summary Number Tab */}
+      <div className={`-mt-2 text-xl font-bold font-sans ${color} bg-white/60 backdrop-blur-sm border-x border-b border-white/70 rounded-b-xl px-4 py-1 shadow-md`}>
+          {isResult && removedValue > 0 ? value - removedValue : totalValue}
       </div>
     </div>
   );
@@ -328,5 +357,38 @@ export const DivisionGrid: React.FC<DivisionGridProps> = ({
     </div>
   );
 };
+
+interface MultiplicationGridProps {
+  itemsPerGroup: number;
+  groupCount: number;
+  color: string;
+  iconType?: 'star' | 'heart' | 'zap' | 'circle';
+  layoutIdResolver?: LayoutIdResolver;
+  emoji?: string;
+}
+
+export const MultiplicationGrid: React.FC<MultiplicationGridProps> = ({
+  itemsPerGroup,
+  groupCount,
+  color,
+  iconType = 'circle',
+  layoutIdResolver,
+  emoji
+}) => {
+  // Reuse DivisionGrid logic/structure but conceptualized as building up groups
+  // We can actually just use DivisionGrid implementation since it renders "groupCount" groups of size "total/groupCount"
+  // Here we have itemsPerGroup and groupCount. Total = itemsPerGroup * groupCount.
+  
+  return (
+    <DivisionGrid 
+      total={itemsPerGroup * groupCount} 
+      groupCount={groupCount}
+      color={color}
+      iconType={iconType}
+      layoutIdResolver={layoutIdResolver}
+      emoji={emoji}
+    />
+  );
+}
 
 export default TenFrameGrid;
