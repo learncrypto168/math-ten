@@ -6,7 +6,9 @@ import {
   query, 
   where, 
   updateDoc, 
-  doc 
+  doc,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import { UserProfile } from '../types';
 
@@ -36,7 +38,10 @@ export const getCurrentUser = async (): Promise<UserProfile | undefined> => {
 // Helper to register a user
 export const registerUser = async (profile: UserProfile): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, USERS_COLLECTION), profile);
+    const docRef = await addDoc(collection(db, USERS_COLLECTION), {
+       ...profile,
+       xp: 0 // Initialize XP
+    });
     // Save to local storage so we remember them next refresh
     localStorage.setItem('sparkle_current_user_id', docRef.id);
     return docRef.id;
@@ -76,7 +81,7 @@ export const loginUser = async (name: string, birthday: string): Promise<UserPro
 };
 
 // Helper to update a user
-export const updateUser = async (id: string | number, updates: Partial<UserProfile>): Promise<void> => {
+export const updateUser = async (id: string | number, updates: Partial<UserProfile> & { xp?: number }): Promise<void> => {
   try {
     const userRef = doc(db, USERS_COLLECTION, String(id));
     await updateDoc(userRef, updates);
@@ -88,4 +93,26 @@ export const updateUser = async (id: string | number, updates: Partial<UserProfi
 
 export const logoutUser = () => {
   localStorage.removeItem('sparkle_current_user_id');
+};
+
+export const getRanking = async () => {
+  try {
+    // Basic query to get users. For production, limit this.
+    const q = query(collection(db, USERS_COLLECTION), orderBy("xp", "desc"), limit(50));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (e) {
+    // Fallback if index is missing or other error. 
+    // Firestore requires composite index for ordering if we had complex filters.
+    // For now, let's just get all (limit 100) and sort client side if needed, or handle error.
+    console.warn("Ranking query failed (likely missing index), fetching unsorted.", e);
+    try {
+        const q = query(collection(db, USERS_COLLECTION), limit(50));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (e2) {
+        console.error("Critical ranking error", e2);
+        return [];
+    }
+  }
 };

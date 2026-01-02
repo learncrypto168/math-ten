@@ -49,7 +49,8 @@ export const TRANSLATIONS = {
     back: "返回",
     confirmLogout: "確定要登出嗎？",
     guest: "訪客",
-    otherSchool: "其他小學"
+    otherSchool: "其他小學",
+    ranking: "排行榜"
   },
   'en': {
     appTitle: "Sparkle Math Adventure",
@@ -99,6 +100,7 @@ export const TRANSLATIONS = {
     back: "Back",
     confirmLogout: "Are you sure you want to logout?",
     guest: "Guest",
-    otherSchool: "Other School"
+    otherSchool: "Other School",
+    ranking: "Ranking"
   }
 };
